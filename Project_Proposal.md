@@ -2,7 +2,7 @@
 
 **Môn:** Cơ Sở Dữ Liệu Phân Tán
 **GVHD:** Lê Hà Thanh
-**SVTH:** Hồ Hoàng Quân — **_info:** [MSSV]
+**SVTH:** Hồ Hoàng Quân — work.huynhhoangquan@gmail.com
 
 ---
 

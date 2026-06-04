@@ -1,6 +1,12 @@
 # Distributed ETL Pipeline — Hệ Thống Giám Sát An Ninh Mạng
 
+**SVTH:** Hồ Hoàng Quân — work.huynhhoangquan@gmail.com
+**GVHD:** Lê Hà Thanh
+**Môn:** Cơ Sở Dữ Liệu Phân Tán
+
 Xây dựng quy trình **ETL phân tán** (Extract-Transform-Load) xử lý dữ liệu log web Apache từ 4 cổng (portal, news, shop, api), theo lý thuyết **Özsu & Valduriez** — *Principles of Distributed Database Systems, 4th Edition*.
+
+**Repo:** https://github.com/HUYNH-HOANG-QUAN/CSDLPT_final
 
 ---
 
