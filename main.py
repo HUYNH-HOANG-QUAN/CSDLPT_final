@@ -55,10 +55,13 @@ def run_single_pipeline(args):
     print("  DISTRIBUTED ETL PIPELINE — HỆ THỐNG GIÁM SÁT AN NINH MẠNG")
     print("=" * 65)
 
+    # Priority: legacy flags > --dataset flag
     if args.csv9k:
         data_source = "csv9k"
     elif args.csv:
         data_source = "csv"
+    elif args.dataset:
+        data_source = args.dataset
     else:
         data_source = DATA_SOURCE_MODE
 
@@ -143,12 +146,12 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python main.py --csv                    # Run pipeline (CSV dataset mode)
-  python main.py --csv --partition range # Run with Range Partitioning + Sampling
-  python main.py --csv --partition hash  # Run with Hash Partitioning (default)
-  python main.py --csv -r 8             # Run with 8 reducers
-  python main.py --csv --validate        # Run + validation
-  python main.py --benchmark speedup     # Speedup benchmark
+  python main.py --dataset balanced       # Run pipeline (default balanced)
+  python main.py --dataset skew -r 4       # Run SKEW dataset (demo Work Stealing)
+  python main.py --dataset skew -r 4 --partition hash --validate
+  python main.py --dataset csv9k -r 4      # Run with 81K duplicates
+  python main.py -r 4 --partition hash     # Change reducers flexibly
+  python main.py --benchmark speedup        # Speedup benchmark
         """,
     )
 
@@ -194,6 +197,20 @@ Examples:
         "--csv9k",
         action="store_true",
         help="Use CSV dataset with 9K duplicate IPs (640K rows, 559K unique IPs, 81K true dupes)",
+    )
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        choices=["balanced", "csv", "csv9k", "skew"],
+        default=None,
+        help=(
+            "Dataset source: "
+            "'balanced' (550K IPs evenly split 4 sites), "
+            "'csv' (same as --csv, 550K unique IPs), "
+            "'csv9k' (same as --csv9k, 640K rows with 81K duplicates), "
+            "'skew' (api=90%% data → Work Stealing demo). "
+            "Default: 'balanced'"
+        ),
     )
     parser.add_argument(
         "--partition",

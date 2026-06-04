@@ -20,6 +20,7 @@ from typing import Optional
 from .config import (
     CSV_FILES,
     CSV_9K_FILES,
+    CSV_SKEW_FILES,
     DATA_SOURCE_MODE,
     DEFAULT_N_REDUCERS,
     GEODB_DEFAULT_PATH,
@@ -124,6 +125,8 @@ class Coordinator:
             self.log_files = dict(CSV_FILES)
         elif self.data_source == "csv9k":
             self.log_files = dict(CSV_9K_FILES)
+        elif self.data_source == "skew":
+            self.log_files = dict(CSV_SKEW_FILES)
         else:
             self.log_files = log_files
 
@@ -318,26 +321,58 @@ class Coordinator:
         logger.info("")
         logger.info("=" * 65)
         logger.info("COORDINATOR: Pipeline Complete")
-        logger.info(f"  Partition strategy:    {stats.partition_strategy.upper()}")
-        logger.info(f"  Total rows read:      {stats.total_rows_read:>12,}")
-        logger.info(f"  Total IP local:     {stats.total_ip_local_unique:>12,}")
-        logger.info(f"  Total IP global:    {stats.total_ip_global_unique:>12,}")
-        logger.info(f"  Duplicates skipped:  {stats.total_ip_skipped_dup:>12,}")
-        ws_str = f"YES — {work_steal_moved} items moved in {work_steal_iters} iters" if work_steal_triggered else "Not triggered"
-        logger.info(f"  Work Stealing:       {ws_str}")
-        logger.info(f"  Phase B time:        {stats.phase_b_time_s:>12.3f}s")
-        logger.info(f"    dedup:             {stats.dedup_time_s:>12.3f}s")
-        logger.info(f"    transform:         {stats.transform_time_s:>12.3f}s")
-        logger.info(f"  Merge duration:      {stats.merge_duration_s:>12.3f}s")
+        logger.info(f"  Partition strategy:     {stats.partition_strategy.upper()}")
+        logger.info(f"  Total rows read:       {stats.total_rows_read:>12,}")
+        logger.info(f"  Total IP local unique: {stats.total_ip_local_unique:>12,}  (after LOCAL dedup)")
+        logger.info(f"  Total IP global unique:{stats.total_ip_global_unique:>12,}  (after GLOBAL dedup)")
+        logger.info(f"  Duplicates skipped:    {stats.total_ip_skipped_dup:>12,}  ← trùng đã xử lý")
+
+        # ── Per-reducer IP distribution ────────────────────────────
+        if stats.ip_counts_per_reducer:
+            total_in_reducers = sum(stats.ip_counts_per_reducer.values())
+            avg_per_reducer = total_in_reducers / len(stats.ip_counts_per_reducer)
+            max_count = max(stats.ip_counts_per_reducer.values())
+            min_count = min(stats.ip_counts_per_reducer.values())
+            logger.info("")
+            logger.info("  [IP Distribution per Reducer]")
+            for rid in sorted(stats.ip_counts_per_reducer.keys()):
+                cnt = stats.ip_counts_per_reducer[rid]
+                pct = cnt / total_in_reducers * 100 if total_in_reducers > 0 else 0
+                logger.info(
+                    f"    Reducer[{rid}]: {cnt:>8,} IPs ({pct:5.1f}%)"
+                )
+            if len(stats.ip_counts_per_reducer) > 1:
+                skew_factor = (max_count - min_count) / avg_per_reducer if avg_per_reducer > 0 else 0
+                logger.info(
+                    f"    {'─'*40}"
+                )
+                logger.info(
+                    f"    Skew Factor: {skew_factor:.4f} "
+                    f"(max={max_count:,} min={min_count:,} avg={avg_per_reducer:,.0f})"
+                )
+
+        # Work Stealing status
+        ws_str = (f"YES — {work_steal_moved:,} items moved in {work_steal_iters} iters"
+                  if work_steal_triggered else "Not triggered (skew <= 50%)")
+        ws_color = ">>>" if work_steal_triggered else "   "
+        logger.info("")
+        logger.info(f"  {ws_color} Work Stealing:    {ws_str}")
+
+        # Timing breakdown
+        logger.info("")
+        logger.info("  [Timing Breakdown]")
+        logger.info(f"    Phase B (reduce+transform): {stats.phase_b_time_s:>10.3f}s")
+        logger.info(f"      └─ dedup:                 {stats.dedup_time_s:>10.3f}s")
+        logger.info(f"      └─ transform:             {stats.transform_time_s:>10.3f}s")
+        logger.info(f"    Merge (Phase C):            {stats.merge_duration_s:>10.3f}s")
         ft_str = (f"DETECTED={stats.ft_failures_detected} | "
                   f"RECOVERED={stats.ft_failures_recovered} | "
                   f"RETRIES={stats.ft_retries_attempted} | "
                   f"SEQUENTIAL_FALLBACK={'YES' if stats.ft_sequential_fallback else 'No'}")
-        logger.info(f"  FaultTolerance:      {ft_str}")
-        logger.info(f"  Total time:         {stats.duration_s:>12.3f}s")
-        logger.info(f"  Throughput (rows/s):{stats.throughput_rows_per_sec:>12,.0f} rows/s")
-        logger.info(f"  Throughput (IPs/s): {stats.throughput_ips_per_sec:>12,.0f} IPs/s")
-        logger.info(f"  Data Skew Factor:   {stats.skew_factor:>12.4f}")
+        logger.info(f"  FaultTolerance:               {ft_str}")
+        logger.info(f"  Total time:                  {stats.duration_s:>10.3f}s")
+        logger.info(f"  Throughput (rows/s):         {stats.throughput_rows_per_sec:>10,.0f} rows/s")
+        logger.info(f"  Throughput (IPs/s):         {stats.throughput_ips_per_sec:>10,.0f} IPs/s")
         logger.info("=" * 65)
 
         if self._memory_monitor:
