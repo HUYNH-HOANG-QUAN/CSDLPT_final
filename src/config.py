@@ -1,0 +1,87 @@
+"""
+config.py — Distributed ETL Pipeline
+Optimal parameters tuned via sweep on 100MB dataset (2026-06-04).
+
+Sweep justification (see notebooks/speedup_analysis.png, memory_threshold.png):
+  LOG mode (I/O-bound): N=1..6 → same ~7.9s  → default N=4
+  CSV mode (CPU-bound): N=6 best: 10,168 r/s  → override N=6
+  Memory threshold: 80% best: 73,663 r/s       → 95% causes GC thrashing
+"""
+import os
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+DATA_DIR = BASE_DIR / "data"
+OUTPUT_DIR = BASE_DIR / "data" / "output"
+
+# ─────────────────────────────────────────────────────────────────
+# OPTIMAL CONFIG — tuned via sweep on 100MB dataset
+# ─────────────────────────────────────────────────────────────────
+OPTIMAL_CONFIG = {
+    "n_reducers": 4,           # LOG: N=1..6 identical (~7.9s). CSV: use --csv -r 6
+    "memory_threshold_pct": 80,  # 80% best. 95% → GC thrashing (15.87s vs 7.85s)
+    "partitioning": "hash",     # Hash: no sampling overhead. Range: +5s overhead
+    "dedup_chunk_size": 2048,   # Optimal batch. 512 fine-grained; 8192+ memory-heavy
+    "skew_threshold": 0.5,       # Work stealing only when skew > 50%
+    "work_steal_max_iterations": 10,
+}
+
+# ── Backward-compatible aliases ──────────────────────────────────
+DEFAULT_N_REDUCERS = OPTIMAL_CONFIG["n_reducers"]
+MEMORY_THRESHOLD_PCT = OPTIMAL_CONFIG["memory_threshold_pct"]
+PARTITIONING_STRATEGY = OPTIMAL_CONFIG["partitioning"]
+DEDUP_CHUNK_SIZE = OPTIMAL_CONFIG["dedup_chunk_size"]
+SKEW_THRESHOLD = OPTIMAL_CONFIG["skew_threshold"]
+WORK_STEAL_MAX_ITERATIONS = OPTIMAL_CONFIG["work_steal_max_iterations"]
+# Only used when PARTITIONING_STRATEGY = "range"
+RANGE_SAMPLE_SIZE = 10000
+
+# ─────────────────────────────────────────────────────────────────
+# DATA SOURCE MODE
+# ─────────────────────────────────────────────────────────────────
+DATA_SOURCE_MODE = "csv"  # "log" or "csv"
+N_EXTRACTORS = 4
+APACHE_REGEX = r"^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
+
+# ─── Log-file mode ───────────────────────────────────────────────
+LOG_FILES = {
+    1: str(BASE_DIR / "portal_access.log"),
+    2: str(BASE_DIR / "news_access.log"),
+    3: str(BASE_DIR / "shop_access.log"),
+    4: str(BASE_DIR / "api_access.log"),
+}
+
+# ─── CSV mode ─────────────────────────────────────────────────────
+CSV_SPLIT_DIR = r"c:\Users\Admin\CSDLPT_final\data\output"
+CSV_FILES = {
+    1: os.path.join(CSV_SPLIT_DIR, "csv_portal.csv"),
+    2: os.path.join(CSV_SPLIT_DIR, "csv_news.csv"),
+    3: os.path.join(CSV_SPLIT_DIR, "csv_shop.csv"),
+    4: os.path.join(CSV_SPLIT_DIR, "csv_api.csv"),
+}
+CSV_DATASET_PATH = os.path.join(CSV_SPLIT_DIR, "apache_550k_unique_ips.csv")
+CSV_SITE_MAPPING = {"portal": 1, "news": 2, "shop": 3, "api": 4}
+
+# ─── CSV9K duplicate dataset (640K rows, 9K IPs ×10) ─────────────
+CSV_9K_DIR = r"c:\Users\Admin\CSDLPT_final\data\output"
+CSV_9K_FILES = {
+    1: os.path.join(CSV_9K_DIR, "csv_9k_portal.csv"),
+    2: os.path.join(CSV_9K_DIR, "csv_9k_news.csv"),
+    3: os.path.join(CSV_9K_DIR, "csv_9k_shop.csv"),
+    4: os.path.join(CSV_9K_DIR, "csv_9k_api.csv"),
+}
+CSV_9K_UNIFIED = os.path.join(CSV_9K_DIR, "apache_550k_9k_dup.csv")
+
+# ─────────────────────────────────────────────────────────────────
+# PIPELINE PATHS
+# ─────────────────────────────────────────────────────────────────
+OUTPUT_PATH = str(OUTPUT_DIR / "central_store.json")
+INTERMEDIATE_DIR = OUTPUT_DIR / "reducers"
+INTERMEDIATE_FILE_PATTERN = "reducer_{rid}.json"
+GEODB_DEFAULT_PATH = str(BASE_DIR / "data" / "GeoLite2-City.mmdb")
+
+# Benchmark sweep list (for reproducibility — not tuned)
+N_REDUCER_VALUES_SPEEDUP = [1, 2, 4, 6, 8, 12]
+
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+INTERMEDIATE_DIR.mkdir(parents=True, exist_ok=True)

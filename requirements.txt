@@ -1,0 +1,8 @@
+# Core dependencies
+geoip2>=4.7.0
+mmdb-reader>=1.0.0
+
+# Optional dependencies
+psutil>=5.9.0  # For memory monitoring
+
+# Testing / utilities
