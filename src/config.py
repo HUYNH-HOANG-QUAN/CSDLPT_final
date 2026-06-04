@@ -39,7 +39,7 @@ RANGE_SAMPLE_SIZE = 10000
 # ─────────────────────────────────────────────────────────────────
 # DATA SOURCE MODE
 # ─────────────────────────────────────────────────────────────────
-DATA_SOURCE_MODE = "csv"  # "log" or "csv"
+DATA_SOURCE_MODE = "log"  # "log" or "csv" (csv mode requires pre-split files in data/output)
 N_EXTRACTORS = 4
 APACHE_REGEX = r"^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
 

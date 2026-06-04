@@ -26,8 +26,8 @@ pip install -r requirements.txt
 
 | Dataset | Lệnh | Rows | Mô tả |
 |---------|-------|------|--------|
-| Balanced (default) | `python main.py --dataset balanced -r 4 --validate` | 550K | 4 site chia đều |
-| Duplicates | `python main.py --dataset csv9k -r 4 --validate` | 640K | 81K trùng lặp |
+| Balanced (default) | `python main.py --dataset balanced -r 3 --validate` | 578K | 4 site chia đều |
+| Duplicates | `python main.py --dataset csv9k -r 3 --validate` | 640K | 314 trùng lặp |
 | Skew (Work Stealing) | `python main.py --dataset skew -r 4 --validate` | 110K | API site = 90% data |
 
 ### Tạo skew dataset trước (chạy 1 lần)
@@ -56,50 +56,60 @@ python main.py --dataset balanced -r 1 --validate
 # 2 reducers
 python main.py --dataset balanced -r 2 --validate
 
-# 3 reducers (thay đổi partition)
+# 3 reducers (khuyến nghị — skew thấp nhất)
 python main.py --dataset balanced -r 3 --validate
 
 # 4 reducers (mặc định)
 python main.py --dataset balanced -r 4 --validate
 
-# 6 reducers (max throughput)
+# 6 reducers
 python main.py --dataset balanced -r 6 --validate
 
 # 8 reducers
 python main.py --dataset balanced -r 8 --validate
 ```
 
-**Output khi chạy sẽ hiển thị:**
+**Output mẫu (3 reducers — tối ưu):**
 
 ```
 =================================================================
 COORDINATOR: Pipeline Complete
   Partition strategy:     HASH
-  Total rows read:         550,000
-  Total IP local unique:   550,000  (after LOCAL dedup)
-  Total IP global unique:  550,000  (after GLOBAL dedup)
-  Duplicates skipped:           0  ← trùng đã xử lý
+  Total rows read:            578,169
+  Total IP local unique:        1,035  (after LOCAL dedup)
+  Total IP global unique:         721  (after GLOBAL dedup)
+  Duplicates skipped:             314  ← trùng đã xử lý
 
   [IP Distribution per Reducer]
-    Reducer[0]:    137,500 IPs ( 25.0%)
-    Reducer[1]:    137,500 IPs ( 25.0%)
-    Reducer[2]:    137,500 IPs ( 25.0%)
-    Reducer[3]:    137,500 IPs ( 25.0%)
+    Reducer[0]:      241 IPs ( 33.4%)
+    Reducer[1]:      248 IPs ( 34.4%)
+    Reducer[2]:      232 IPs ( 32.2%)
     ────────────────────────────────────────
-    Skew Factor: 0.0000 (max=137500 min=137500 avg=137500)
+    Skew Factor: 0.0666 (max=248 min=232 avg=240)
 
-     Work Stealing:    Not triggered (skew <= 50%)
+      Work Stealing:    Not triggered (skew <= 50%)
 
   [Timing Breakdown]
-    Phase B (reduce+transform):     54.090s
+    Phase B (reduce+transform):      0.366s
       └─ dedup:                      0.001s
-      └─ transform:                 54.089s
-    Merge (Phase C):                 0.320s
+      └─ transform:                  0.035s
+    Merge (Phase C):                 0.089s
   FaultTolerance:               DETECTED=0 | RECOVERED=0 | RETRIES=0 | SEQUENTIAL_FALLBACK=No
-  Total time:                  54.090s
-  Throughput (rows/s):        10,168 rows/s
-  Throughput (IPs/s):          10,168 IPs/s
+  Total time:                       1.497s
+  Throughput (rows/s):            386,137 rows/s
+  Throughput (IPs/s):                482 IPs/s
 =================================================================
+
+============================================================
+CORRECTNESS VALIDATION REPORT
+============================================================
+  Baseline (raw balanced):           721 IPs
+  Pipeline (deduplicated):                    721 IPs
+  Missing (in baseline not pipeline):           0
+  Extra   (in pipeline not baseline):           0
+
+  ✓ VALIDATION PASS: 721 IPs — De-duplication is 100% accurate
+============================================================
 ```
 
 ---
@@ -239,15 +249,18 @@ for i, (ip, info) in enumerate(list(data.items())[:5]):
 
 ## 7. Kết Quả Benchmark Thực tế
 
-### 7.1. CSV Mode — CPU-Bound (550K rows, 100% unique IPs)
+### 7.1. Balanced Dataset — Log Mode (578K rows)
 
-| N Reducers | Time (s) | Throughput | Speedup |
-|-----------|----------|------------|---------|
-| 1 | 73.76 | 7,456 rows/s | 1.00x |
-| 4 | 74.24 | 7,408 rows/s | 0.99x |
-| **6** | **54.09** | **10,168 rows/s** | **1.36x** |
+| N Reducers | Time (s) | Throughput | Skew Factor | Đánh giá |
+|-----------|----------|------------|-------------|----------|
+| 1 | ~4.0 | ~145K rows/s | N/A | Baseline |
+| 2 | ~2.5 | ~230K rows/s | 0.15 | Tốt |
+| **3** | **~1.5** | **~386K rows/s** | **0.07** | **⭐ TỐI ƯU** |
+| 4 | ~1.5 | ~394K rows/s | 0.20 | Tốt |
+| 6 | ~1.7 | ~343K rows/s | 0.30 | Khá |
+| 8 | ~1.8 | ~330K rows/s | 0.33 | Khá |
 
-→ **Khuyến nghị:** `python main.py --dataset balanced -r 6`
+→ **Khuyến nghị:** `python main.py --dataset balanced -r 3` (skew thấp nhất)
 
 ### 7.2. Skew Dataset (110K rows, 90% API)
 
@@ -258,14 +271,16 @@ for i, (ip, info) in enumerate(list(data.items())[:5]):
 
 → **Work Stealing** giảm skew từ 3.50 → ~0.1
 
-### 7.3. Dedup Stats (CSV9K Mode)
+### 7.3. Dedup Stats (Balanced Mode)
 
 | Metric | Value |
 |--------|-------|
-| Total rows read | 640,000 |
-| Unique IPs (local) | 558,999 |
-| Unique IPs (global) | 558,999 |
-| Duplicates skipped | 81,000 |
+| Total rows read | 578,169 |
+| Unique IPs (local) | 1,035 |
+| Unique IPs (global) | 721 |
+| Duplicates skipped | 314 |
+
+→ **Validation: 100% accurate** — De-duplication hoạt động đúng
 
 ---
 
@@ -276,4 +291,4 @@ for i, (ip, info) in enumerate(list(data.items())[:5]):
 | `ModuleNotFoundError: No module named 'geoip2'` | `pip install geoip2` |
 | `GeoIP2 database not found` | Đặt `GeoLite2-City.mmdb` trong `data/` |
 | `Permission denied: central_store.json` | Kill process khác đang giữ file |
-| Validation FAIL | Chạy lại: `python main.py --dataset balanced -r 4 --validate` |
+| Validation FAIL | Chạy lại: `python main.py --dataset balanced -r 3 --validate` |
